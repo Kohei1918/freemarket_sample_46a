@@ -83,5 +83,10 @@ gem 'mini_magick'
 gem 'active_hash'
 gem 'fog-aws'
 gem "jquery-slick-rails"
+gem 'gretel'
 gem "omniauth-google-oauth2"
 gem 'omniauth-facebook'
+gem 'payjp'
+gem 'recaptcha', require: "recaptcha/rails"
+gem 'dotenv-rails'
+gem 'jquery-ui-rails'

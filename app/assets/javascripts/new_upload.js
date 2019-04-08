@@ -1,6 +1,7 @@
 $(function () {
   let imageCount = $(".sell-form__image").data('image_count');
   let imageList = [];
+  let cropper;
 
   $(document).on('change', '#item_item_image_image', function () {
     const files = $.extend(true, {}, $(this).prop('files'));
@@ -13,6 +14,75 @@ $(function () {
     $("#item_item_image_image").click();
   });
 
+  // cropper表示
+  $(document).on('click', '.upload-item__container__button__edit', function () {
+    console.log('edit!');
+    const id = $(this).data('id');
+    let canvas = $("#canvas");
+    const image = $("#uploadImage-" + id).attr('src');
+    console.log(canvas);
+    canvas.attr('src', image);
+    canvas.cropper({
+      viewMode: 1,
+      dragMode: "move",
+      aspectRatio: 1 / 1,
+      guides: false,
+      center: false,
+      background: false,
+      autoCropArea: 0.5,
+      cropBoxMovable: false,
+      cropBoxResizable: false,
+      minCropBoxWidth: 280,
+      minCropBoxHeight: 280,
+      ready: function () {
+        const cropper = this.cropper;
+        cropper.zoomTo(0);
+
+        const imageData = cropper.getImageData();
+        console.log(imageData);
+        const minSliderZoom = imageData.width / imageData.naturalWidth;
+
+        $("#zoomSlider").slider("option", "max", 1);
+        $("#zoomSlider").slider("option", "min", minSliderZoom);
+        $("#zoomSlider").slider("value", minSliderZoom);
+      },
+    });
+
+    cropper = canvas.data('cropper');
+
+    $("#croppingModal").css("display", "block");
+
+    // cropper戻るボタン
+    $(document).one('click', '.cropper__body__button__back', function () {
+      $("#croppingModal").css("display", "none");
+      $("#canvas").cropper("destroy");
+      $("#zoomSlider").slider("value", 0);
+    });
+
+    $(document).one('click', '.cropper__body__button__enter', function () {
+      const result = cropper.getCroppedCanvas({ maxWidth: 600, maxHeight: 600 });
+      const croppedImage = result.toDataURL('image/jpeg');
+      imageList[id] = croppedImage;
+      $("#uploadImage-" + id).attr('src', croppedImage);
+      $("#croppingModal").css("display", "none");
+      $("#canvas").cropper("destroy");
+      $("#zoomSlider").slider("value", 0);
+    });
+  });
+
+  // ズームスライダー初期化
+  $("#zoomSlider").slider({
+    orientation: "horizontal",
+    max: 1,
+    min: 0,
+    value: 0,
+    step: 0.001,
+    slide: function () {
+      cropper.zoomTo($(this).slider('value'));
+    }
+  });
+
+  // 削除機能
   $(document).on('click', '.upload-item__container__button__delete', function () {
     const id = $(this).data('id');
 
@@ -35,9 +105,9 @@ $(function () {
       $("#storedItem-" + id).empty();
       $("#dropbox").css("display", "block");
     })
-
   });
 
+  // ドラッグ＆ドロップ
   $(document).on('dragover', '#dropbox', function (event) {
     event.stopPropagation();
     event.preventDefault();
@@ -71,8 +141,11 @@ $(function () {
     let images = imageList.filter(function (image) {
       return image != null;
     });
-    images.forEach(function (image, index) {
-      formData.append(`item[item_images_attributes][${index}][image]`, image);
+
+    images.map(function (image, index) {
+      const blob = base64ToBlob(image);
+      console.log(blob);
+      formData.append(`item[item_images_attributes][${index}][image]`, blob, "blob" + index + ".jpg");
     });
 
     if ($("#item_sub_sub_category_id").val()) {
@@ -88,9 +161,12 @@ $(function () {
       formData.append("item[category_id]", "");
     }
 
+    if ($("#item_brand_id").val()) {
+      formData.append("item[brand_id]", $("#item_brand_id").val());
+    }
+
     formData.append("item[name]", $("#nameField").val());
     formData.append("item[comment]", $("#commentField").val());
-    formData.append("item[brand_id]", $("#item_brand_id").val());
     formData.append("item[condition]", $("#item_condition").val());
     formData.append("item[shipping_fee]", $("#item_shipping_fee").val());
     formData.append("item[prefecture_id]", $("#item_prefecture_id").val());
@@ -114,8 +190,8 @@ $(function () {
         $("#newItemSubmitButton").css("background-color", "#ccc");
         $("#loadIcon").css("display", "block");
       },
-    }).done(function () {
-      location.href = "/";
+    }).done(function (data) {
+      location.href = "/items/" + data.id;
     }).fail(function (response) {
       showError();
     }).always(function () {
@@ -125,6 +201,45 @@ $(function () {
       $("#newItemSubmitButton").prop('disabled', false);
     });
   });
+
+  function resizeImage(base64image, size, callback) {
+    let canvas = document.createElement('canvas');
+    let ctx = canvas.getContext('2d');
+    let image = new Image();
+    // image.crossOrigin = "Anon;ymous";
+    image.onload = function (event) {
+      let dstWidth = 0;
+      let dstHeight = 0;
+
+      if (this.width > this.height) {
+        dstWidth = size;
+        dstHeight = this.height * size / this.width;
+      }
+      else {
+        dstHeight = size;
+        dstWidth = this.width * size / this.height;
+      }
+      canvas.width = dstWidth;
+      canvas.height = dstHeight;
+      console.log(canvas);
+      ctx.drawImage(this, 0, 0, this.width, this.height, 0, 0, dstWidth, dstHeight);
+      callback(canvas.toDataURL());
+    };
+    image.src = base64image;
+  }
+
+  function base64ToBlob(base64image){
+    const type = "image/jpeg";
+    const binary = atob(base64image.split(',')[1]);
+    let buffer = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++){
+      buffer[i] = binary.charCodeAt(i);
+    }
+
+    const blob = new Blob([buffer.buffer], { type: type });
+
+    return blob;
+  }
 
   function addPreviewToUploadField(image, index) {
     const html = `<div class="upload-item" id="uploadItem-${index}">
@@ -170,10 +285,11 @@ $(function () {
       const reader = new FileReader();
 
       reader.onload = function () {
-        imageList.push(files[i]);
-        addPreviewToUploadField(reader.result, imageList.length - 1);
+        resizeImage(reader.result, 600, function (image) {
+          imageList.push(image);
+          addPreviewToUploadField(image, imageList.length - 1);
+        });
       }
-
       reader.readAsDataURL(files[i]);
     }
   }
@@ -237,10 +353,10 @@ $(function () {
     }
 
     if ($("#profitField").text() === "-") {
-      $(".sell-form__price__select-box__price-wrap__left__error").html(`<p>300以上9999999以下で入力してください</p>`);
+      $(".sell-form__price__select-box__price-wrap__error").html(`<p>300以上9999999以下で入力してください</p>`);
     }
     else {
-      $(".sell-form__price__select-box__price-wrap__left__error").empty();
+      $(".sell-form__price__select-box__price-wrap__error").empty();
     }
   }
 });
